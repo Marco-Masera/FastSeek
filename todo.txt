@@ -1,0 +1,26 @@
+Generic indexer:
+>Index any csv-like file - compressed with bgzip or plaintext
+>Do not copy or modify file, create an index allowing to retrieve lines of the original csv 
+>Hashmap size is user specified
+>Column to index is user specified 
+>File to index in stdin; args: index column, hashmap size
+    compress: <file_name> <column_number>
+        --hasmap_size <default: num lines> (Structure in-memory!)
+        --separator <default: \t>
+        (forse) --bgzip: is compressed file
+        --d duplicates: allow duplicates - print all
+        --nr: no-ram: build indexes directly on disk (slower, less ram consumption)
+
+Index file structure:
+>Indexes: fixed length (64 * hashmap size)
+    -Implicit map: <hash value>(position) -> index in block or 0
+>Blocks: variable length (byte indexed)
+    -Each entry is 64 x 2:
+        -First int: offset in original file of the entry 
+        -Second int: next block (linked-list-like) or 0
+
+
+Test:
+    -Count lines in big files, and measure wc -l time in the meanwhile
+    -Index file and measure time; measure file size too.
+    -Test
