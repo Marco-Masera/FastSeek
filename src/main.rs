@@ -1,56 +1,15 @@
+mod file_reader;
+mod file_writer;
+
 use std::fs::File;
 use std::io::{self, BufRead, Seek};
 use std::path::Path;
 use std::io::Write;
-use std::io::Read;
 use std::vec;
-use bgzip::{BGZFError, BGZFReader, BGZFWriter, Compression};
+use bgzip::{BGZFReader, BGZFWriter, Compression};
 use stable_hash::fast_stable_hash;
-
-
-
-enum FileReader {
-    Standard(io::BufReader<File>),
-    BGZF(BGZFReader<io::BufReader<File>>),
-}
-impl FileReader {
-    fn seek(&mut self, pos: u64) -> () {
-        match self {
-            FileReader::Standard(reader) => _ = reader.seek(io::SeekFrom::Start(pos)),
-            FileReader::BGZF(reader) => _ = reader.bgzf_seek(pos).unwrap(),
-        };
-    }
-    fn read_exact(&mut self, buffer: &mut [u8]) -> Result<(), io::Error> {
-        match self {
-            FileReader::Standard(reader) => reader.read_exact(buffer),
-            FileReader::BGZF(reader) => reader.read_exact(buffer),
-        }
-    }
-    fn read_line(&mut self, buffer: &mut String) -> Result<usize, io::Error> {
-        match self {
-            FileReader::Standard(reader) => reader.read_line(buffer),
-            FileReader::BGZF(reader) => reader.read_line(buffer),
-        }
-    }
-    fn num_lines(&mut self) -> u64 {
-        let mut number_lines = 0;
-        match self {
-            FileReader::Standard(reader) => {
-                for _line in reader.lines() {
-                    number_lines += 1;
-                }
-                self.seek(0);
-            },
-            FileReader::BGZF(reader) => {
-                for _line in reader.lines() {
-                    number_lines += 1;
-                }
-                self.seek(0);
-            },
-        }
-        return number_lines;
-    }
-}
+use file_reader::FileReader;
+use file_writer::FileWriter;
 
 
 fn hash_function(value: &str, hashmap_size: u128) -> u64 {
@@ -58,74 +17,35 @@ fn hash_function(value: &str, hashmap_size: u128) -> u64 {
     return r as u64;
 }
 
-fn get_gz_reader(filename: &String) -> FileReader {
-    let file = File::open(&filename).unwrap();
-    let buf_reader = io::BufReader::new(file);
-    FileReader::BGZF(BGZFReader::new(buf_reader).unwrap())
-}
-fn get_reader(filename: &String) -> FileReader {
-    let path = Path::new(&filename);
-    let file = match File::open(&path) {
-        Err(why) => panic!("couldn't open {}: {}", filename, why),
-        Ok(file) => file,
-    };
-    FileReader::Standard(io::BufReader::new(file))
+fn add_to_output_blocks(output_writer: &mut FileWriter, position: u64, value: u64, next: u64) {
+    output_writer.seek(io::SeekFrom::Start(position)).unwrap();
+    output_writer.write_all(&value.to_ne_bytes()).unwrap();
+    output_writer.write_all(&next.to_ne_bytes()).unwrap();
 }
 
-fn get_writer(filename: String, hashmap_size: u128) -> io::BufWriter<File> {
-    let path = Path::new(&filename);
-    let file = match File::create(&path) {
-        Err(why) => panic!("couldn't create {}: {}", filename, why),
-        Ok(file) => file,
+
+fn index(filename: String, column: usize, mut hashmap_size: u128, separator: String) {
+    let is_compressed = filename.ends_with(".gz");
+    let mut input_reader: FileReader = match is_compressed{
+        true => FileReader::get_gz_reader(&filename),
+        false => FileReader::get_reader(&filename),
     };
-    let mut writer = io::BufWriter::new(file);
-    //Write hashmap_size to file
-    writer.write_all(&hashmap_size.to_ne_bytes()).unwrap();
-    //Fill hashmap with zeros
+    if hashmap_size == 0 {
+        hashmap_size = input_reader.num_lines() as u128;
+    }
+    let mut output_writer = FileWriter::get_writer(format!("{}.index", filename));
+
+    //Write hashmap_size of 0s to index file
+    output_writer.write_all(&hashmap_size.to_ne_bytes()).unwrap();
     const CHUNK_SIZE: usize = 1024*8;
     let total_bytes = hashmap_size as usize * 8;
     let mut remaining = total_bytes;
     let chunk = vec![0; CHUNK_SIZE];
     while remaining > 0 {
         let to_write = remaining.min(CHUNK_SIZE);
-        writer.write_all(&chunk[..to_write]).unwrap();
+        output_writer.write_all(&chunk[..to_write]).unwrap();
         remaining -= to_write;
     }
-    return writer;
-}
-
-
-fn add_to_output_blocks(output_writer: &mut io::BufWriter<File>, position: u64, value: u64, next: u64) {
-    output_writer.seek(io::SeekFrom::Start(position)).unwrap();
-    output_writer.write_all(&value.to_ne_bytes()).unwrap();
-    output_writer.write_all(&next.to_ne_bytes()).unwrap();
-}
-
-fn print_file(filename: &String) {
-    let mut reader = get_reader(filename);
-    let mut buffer = [0; 8];
-    let mut i = 0;
-    loop {
-        if reader.read_exact(&mut buffer).is_err() {
-            break;
-        }
-        let content = u64::from_ne_bytes(buffer);
-        i += 8;
-    }
-}
-
-
-
-fn index(filename: String, column: usize, mut hashmap_size: u128, separator: String) {
-    let is_compressed = filename.ends_with(".gz");
-    let mut input_reader: FileReader = match is_compressed{
-        true => get_gz_reader(&filename),
-        false => get_reader(&filename),
-    };
-    if hashmap_size == 0 {
-        hashmap_size = input_reader.num_lines() as u128;
-    }
-    let mut output_writer = get_writer(format!("{}.index", filename), hashmap_size);
     let mut block_start: u64 = (hashmap_size  as u64 +1)*8;
 
 
@@ -155,22 +75,22 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
     }
 }
 
-fn search(keyword: String, filename: String, column: usize, mut hashmap_size: u128, separator: String){
+fn search(keyword: String, filename: String, column: usize, separator: String){
     let is_compressed = filename.ends_with(".gz");
     let mut file_reader: FileReader = match is_compressed{
-        true => get_gz_reader(&filename),
-        false => get_reader(&filename),
+        true => FileReader::get_gz_reader(&filename),
+        false => FileReader::get_reader(&filename),
     };
-    let mut index_reader = get_reader(&format!("{}.index", filename));
+    let mut index_reader = FileReader::get_reader(&format!("{}.index", filename));
     //Find hashmap size
     let mut buffer = [0; 8];
     index_reader.read_exact(&mut buffer).unwrap();
-    hashmap_size = u64::from_ne_bytes(buffer) as u128;
+    let hashmap_size = u64::from_ne_bytes(buffer) as u128;
     
     //Hash keyword
     let hash = hash_function(&keyword, hashmap_size) + 1;
     //Find block start
-    let mut block_start = 0;
+    let mut block_start;
     index_reader.seek(hash*8);
     let mut buffer = [0; 8];
     index_reader.read_exact(&mut buffer).unwrap();
@@ -198,8 +118,6 @@ fn search(keyword: String, filename: String, column: usize, mut hashmap_size: u1
         }
         block_start = next;
     }
-
-    print_file(&format!("{}.index", filename));
 }
 
 fn run_test(){
@@ -208,13 +126,13 @@ fn run_test(){
     let mut writer = io::BufWriter::new(file);
     for i in 0..100 {
         let string = format!("prova{}", i);
-        writer.write_all(format!("1,{},0,0,0,eruheigrneiugrheriuhg,ergbneirgbeiugberiugberiuhg\n", string).as_bytes());
+        let _ = writer.write_all(format!("1,{},0,0,0,eruheigrneiugrheriuhg,ergbneirgbeiugberiugberiuhg\n", string).as_bytes());
         //writer.write_line();
     }
-    writer.flush();
+    let _ = writer.flush();
     index("test.csv".to_string(), 1, 0, ",".to_string());
     for i in 0..100 {
-        search(format!("prova{}", i), "test.csv".to_string(), 1, 0, ",".to_string());
+        search(format!("prova{}", i), "test.csv".to_string(), 1, ",".to_string());
     }
 }
 fn run_test_compressed(){
@@ -227,11 +145,11 @@ fn run_test_compressed(){
         let _ =writer.write_all(format!("1,{},0,0,0,eruheigrneiugrheriuhg,ergbneirgbeiugberiugberiuhg\n", string).as_bytes());
         //writer.write_line();
     }
-    writer.flush();
+    let _ = writer.flush();
     let _ = writer.close();
     index("test.csv.gz".to_string(), 1, 0, ",".to_string());
     for i in 0..100 {
-        search(format!("prova{}", i), "test.csv.gz".to_string(), 1, 0, ",".to_string());
+        search(format!("prova{}", i), "test.csv.gz".to_string(), 1, ",".to_string());
     }
 }
 fn test_compression(){
@@ -267,7 +185,7 @@ fn test_compression(){
     for i in (0..10).rev() {
         let _ = reader.bgzf_seek(v[i] as u64);
         let mut line = String::new();
-        let bytes_read = reader.read_line(&mut line).unwrap();
+        let _ = reader.read_line(&mut line).unwrap();
         println!("Second read: {}: {}",v[i], line);
     }
 }
