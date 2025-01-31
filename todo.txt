@@ -18,7 +18,10 @@ Index file structure:
     -Each entry is 64 x 2:
         -First int: offset in original file of the entry 
         -Second int: next block (linked-list-like) or 0
-
+    Ottimizzazione::
+        -Direct: se non ci sono conflitti, indice direttamente in hashtable
+            -Se conflitti, usa blocchi
+        -Usa primo bit dei 64 per distinguere puntatore a file da puntatore a blocco!
 
 
     TODO:
@@ -28,18 +31,11 @@ Index file structure:
     Nuovo flag - compress hashmap
         -Flag compressed hashmap: deve prima caricarla interamente in memoria, ma index + piccolo 
         -Se false (default): 2 file, hashmap in chiaro, blocchi compressi 
-    Ottimizzazione::
-        -Direct: se non ci sono conflitti, indice direttamente in hashtable
-            -Se conflitti, usa blocchi
-        -Usa primo bit dei 64 per distinguere puntatore a file da puntatore a blocco!
     Nuovo flag - contiguous block 
         -Invece di blocchi come linked list, blocchi contigui.
         -Accesso + veloce, dimezzi spazio perché non serve puntatore a next 
         -Usa primo bit x distinguere se è il primo elemento di un blocco o una continuazione
         -Indexing è significativamente più lento.
-    Rifare blocco header ben fatto 
-        -Usare una struct - accedi facilmente a dimensione del blocco, invece di usare +8 hardcoded 
-        -Introdurre dimensione hashtable, modalità
-        -Introdurre versione: così si garantisce retrocompatibilità
     Quando lanci index:
         -Stampa opzioni e raccomandazioni (es using linked-list blocks, not good for datasets with many duplicates)
+    Multithreading
