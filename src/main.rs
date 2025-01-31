@@ -16,6 +16,7 @@ use file_writer::FileWriter;
 
 const CURRENT_VERSION: u8 = 0;
 const HASHMAP_ENTRY_SIZE: u8 = 8;
+const BLOCK_BUFFER_SIZE:usize = 1024*50*8;
 
 
 fn hash_function(value: &str, hashmap_size: u128) -> u64 {
@@ -62,10 +63,9 @@ impl IndexEntry{
     }
 }
 
-fn add_to_output_blocks(output_writer: &mut FileWriter, position: u64, value: u64, next: u64) {
-    output_writer.seek(io::SeekFrom::Start(position)).unwrap();
-    output_writer.write_all(&value.to_be_bytes()).unwrap();
-    output_writer.write_all(&next.to_be_bytes()).unwrap();
+
+fn flush_buffer(output_writer: &mut FileWriter, buffer: [u8; BLOCK_BUFFER_SIZE], to: usize){
+    let _ = output_writer.write_all(&buffer[..to]);
 }
 
 
@@ -113,6 +113,9 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
     let mut debug_conflicts = 0;
     let mut debug_conflicts_second = 0;
 
+    let mut blocks_buffer: [u8; BLOCK_BUFFER_SIZE] = [0; BLOCK_BUFFER_SIZE];
+    let mut blocks_buffer_used = 0;
+    output_writer.seek(io::SeekFrom::Start(block_starting_address));
     loop {
         let bytes_read = input_reader.read_line(&mut line).unwrap();
         if bytes_read == 0 {
@@ -127,37 +130,38 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
             IndexEntryType::NULL => {index_map[hash as usize] = IndexEntry::new_direct(offset_on_original_file);}
             IndexEntryType::Indirect => {
                 debug_conflicts +=1; debug_conflicts_second += 1;
-                add_to_output_blocks(
+                /*add_to_output_blocks(
                     &mut output_writer, block_first_free, 
                     offset_on_original_file, current_index.index
-                );
+                );*/
+                blocks_buffer[blocks_buffer_used..blocks_buffer_used+8].copy_from_slice(&offset_on_original_file.to_be_bytes());
+                blocks_buffer[blocks_buffer_used+8..blocks_buffer_used+16].copy_from_slice(&current_index.index.to_be_bytes());
                 index_map[hash as usize] = IndexEntry::new_indirect(block_first_free);
                 block_first_free += 16;
+                blocks_buffer_used += 16;
             }
             IndexEntryType::Direct => {
                 debug_conflicts +=1;
-                add_to_output_blocks(
+                /*add_to_output_blocks(
                     &mut output_writer, block_first_free, 
                     current_index.get_offset(), IndexEntry::new_direct(offset_on_original_file).index
-                );
+                );*/
+                blocks_buffer[blocks_buffer_used..blocks_buffer_used+8].copy_from_slice(&current_index.get_offset().to_be_bytes());
+                blocks_buffer[blocks_buffer_used+8..blocks_buffer_used+16].copy_from_slice(&IndexEntry::new_direct(offset_on_original_file).index.to_be_bytes());
                 index_map[hash as usize] = IndexEntry::new_indirect(block_first_free);
                 block_first_free += 16;
-                /*let value = current_index.get_offset();
-                add_to_output_blocks(
-                    &mut output_writer, block_first_free, 
-                    value, IndexEntry::new_indirect(block_first_free+16).index
-                );
-                index_map[hash as usize] = IndexEntry::new_indirect(block_first_free);
-                block_first_free += 16;
-                add_to_output_blocks(
-                    &mut output_writer, block_first_free, 
-                    offset_on_original_file, IndexEntry::new_null().index 
-                );
-                block_first_free += 16;*/
+                blocks_buffer_used += 16;
             }
         }
         offset_on_original_file += bytes_read as u64;
         line.clear();
+        if blocks_buffer_used == BLOCK_BUFFER_SIZE{
+            flush_buffer(&mut output_writer, blocks_buffer, BLOCK_BUFFER_SIZE);
+            blocks_buffer_used = 0;
+        }
+    }
+    if blocks_buffer_used > 0 {
+        flush_buffer(&mut output_writer, blocks_buffer, blocks_buffer_used);
     }
     println!("C {} slC: {}", debug_conflicts, debug_conflicts_second);
     output_writer.seek(io::SeekFrom::Start(header.get_header_size().into())).unwrap();
@@ -298,7 +302,7 @@ fn main() {
          }
     }
 }
-/*fn main(){
+fn test(){
     run_test_compressed();
     run_test();
-}*/
+}

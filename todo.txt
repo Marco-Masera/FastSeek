@@ -50,10 +50,10 @@ Index file structure:
 Banchmarking:
     >50M records:
         TIME: (RELEASE mode (optimizations ON))
-            -28 seconds
-            -26 seconds - hashmap_size as num_lines
-            -17 second  - hasmap_size as 2*num_lines
-            -12 seconds in RELEASE mode + hashmap_size specified as 4*num_lines
+            -6 seconds with no hashmap-size
+            -4 seconds??? - hashmap_size as num_lines
+            -4 seconds  - hasmap_size as 2*num_lines
+            -5 seconds in RELEASE mode + hashmap_size specified as 4*num_lines
                 vs 16 seconds of zcat > ..
             -Search - instant
         SPACE:
@@ -62,7 +62,5 @@ Banchmarking:
 
     ==> Conflicts: C 4.597.713 slC: 1.294.257
 
-    ==> Larger hasmap => Fewer collisions => WAY FASTER!
-        -Check how much faster
-        -Maybe do 2x by default
-        -Maybe try to optimize inner code to make conflicts less problematic
+    ==> With new optimization, smaller hashamp is not a problem anymore
+        -Good, no need to waste space with larger hashmaps
