@@ -1,15 +1,21 @@
+
+
 Generic indexer:
->Index any csv-like file - compressed with bgzip or plaintext
->Do not copy or modify file, create an index allowing to retrieve lines of the original csv 
->Hashmap size is user specified
->Column to index is user specified 
->File to index in stdin; args: index column, hashmap size
-    compress: <file_name> <column_number>
-        --hasmap_size <default: num lines> (Structure in-memory!)
+
+    <bin> index <filename> <--column N> <--separator string> <--hashmap-size size>
+        --column REQUIRED  (shortcut: -cN, for example -c0 for first column)
+            >Indexed from 0, tell that to the user
         --separator <default: \t>
-        (forse) --bgzip: is compressed file
-        --d duplicates: allow duplicates - print all
-        --nr: no-ram: build indexes directly on disk (slower, less ram consumption)
+        --hasmap_size <default: num lines of original file>  (shortcut: -h1000)
+            >(Structure is kept in-memory)
+            >If user knows number of lines, better to provide them by hand - will make process faster
+
+    <bin> search <filename> <KEYWORDS>  <--column N> <--separator string>  --print-duplicates
+        KEYWORDS: string or sequence of strings to search
+        --column REQUIRED  (shortcut: -cN, for example -c0 for first column)
+                >Indexed from 0, tell that to the user
+        --separator <default: \t>
+        --print-duplicates: this flag prints all lines with the keyword, if more than one exist
 
 Index file structure:
 >Indexes: fixed length (64 * hashmap size)
@@ -39,3 +45,24 @@ Index file structure:
     Quando lanci index:
         -Stampa opzioni e raccomandazioni (es using linked-list blocks, not good for datasets with many duplicates)
     Multithreading
+
+
+Banchmarking:
+    >50M records:
+        TIME: (RELEASE mode (optimizations ON))
+            -28 seconds
+            -26 seconds - hashmap_size as num_lines
+            -17 second  - hasmap_size as 2*num_lines
+            -12 seconds in RELEASE mode + hashmap_size specified as 4*num_lines
+                vs 16 seconds of zcat > ..
+            -Search - instant
+        SPACE:
+            -216M index 
+                vs 2.8G uncompressed original data
+
+    ==> Conflicts: C 4.597.713 slC: 1.294.257
+
+    ==> Larger hasmap => Fewer collisions => WAY FASTER!
+        -Check how much faster
+        -Maybe do 2x by default
+        -Maybe try to optimize inner code to make conflicts less problematic

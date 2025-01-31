@@ -8,6 +8,7 @@ use std::path::Path;
 use std::io::Write;
 use std::vec;
 use bgzip::{BGZFReader, BGZFWriter, Compression};
+use clap::Parser;
 use stable_hash::fast_stable_hash;
 use file_reader::FileReader;
 use file_writer::FileWriter;
@@ -108,6 +109,10 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
 
     let mut line = String::new();
     let mut offset_on_original_file: u64 = 0;
+
+    let mut debug_conflicts = 0;
+    let mut debug_conflicts_second = 0;
+
     loop {
         let bytes_read = input_reader.read_line(&mut line).unwrap();
         if bytes_read == 0 {
@@ -116,18 +121,12 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
         let mut parts = line.split(&separator);
         let value = parts.nth(column).unwrap();
         let hash = hash_function(value, hashmap_size);
-        
-        /*
-            offset_on_original_file: offset in the original file where the line was read
-            hash: index on has table
-            block_first_free: offset in the block part of index
-            index_map: hashmap that maps hash to block offset
-         */
+
         let current_index = &index_map[hash as usize];
         match current_index.get_type(){
             IndexEntryType::NULL => {index_map[hash as usize] = IndexEntry::new_direct(offset_on_original_file);}
             IndexEntryType::Indirect => {
-                let next = current_index.get_offset();
+                debug_conflicts +=1; debug_conflicts_second += 1;
                 add_to_output_blocks(
                     &mut output_writer, block_first_free, 
                     offset_on_original_file, current_index.index
@@ -136,7 +135,14 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
                 block_first_free += 16;
             }
             IndexEntryType::Direct => {
-                let value = current_index.get_offset();
+                debug_conflicts +=1;
+                add_to_output_blocks(
+                    &mut output_writer, block_first_free, 
+                    current_index.get_offset(), IndexEntry::new_direct(offset_on_original_file).index
+                );
+                index_map[hash as usize] = IndexEntry::new_indirect(block_first_free);
+                block_first_free += 16;
+                /*let value = current_index.get_offset();
                 add_to_output_blocks(
                     &mut output_writer, block_first_free, 
                     value, IndexEntry::new_indirect(block_first_free+16).index
@@ -147,13 +153,13 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
                     &mut output_writer, block_first_free, 
                     offset_on_original_file, IndexEntry::new_null().index 
                 );
-                block_first_free += 16;
+                block_first_free += 16;*/
             }
         }
-
         offset_on_original_file += bytes_read as u64;
         line.clear();
     }
+    println!("C {} slC: {}", debug_conflicts, debug_conflicts_second);
     output_writer.seek(io::SeekFrom::Start(header.get_header_size().into())).unwrap();
     for i in 0..hashmap_size {
         output_writer.write_all(&index_map[i as usize].to_be_bytes()).unwrap();
@@ -227,6 +233,13 @@ fn search(keyword: String, filename: String, column: usize, separator: String) -
                 if test_file(file_offset, &mut original_file_reader, &keyword, column, &separator){
                     return true;
                 }
+                if current_index.get_type() == IndexEntryType::Direct{
+                    if test_file(current_index.get_offset(), &mut original_file_reader, &keyword, column, &separator){
+                        return true;
+                    }
+                    println!("Keyword not found");
+                    return false;
+                }
             }
         }
     }
@@ -266,10 +279,26 @@ fn run_test_compressed(){
     assert! (!search("NOT_EXISTING".to_string(), "test.csv.gz".to_string(), 1, ",".to_string()));
 }
 
-
+mod command_line_tool;
+use command_line_tool::{Cli, Commands};
 fn main() {
-    run_test_compressed();
-    run_test();
     //index("data.csv".to_string(), 0, 0, ",".to_string());
     //search("prova2".to_string(), "data.csv".to_string(), 0, 0, ",".to_string());
+    let cli = Cli::parse();
+    match cli.command {
+        Commands::Index { filename, column, separator, hashmap_size } => {
+            index(filename, column, hashmap_size, separator);
+        }
+        Commands::Search { filename, keyword, column, separator, print_duplicates } => {
+            search(keyword, filename, column, separator);
+        }
+        Commands::Test{} => { 
+            run_test_compressed();
+            run_test();
+         }
+    }
 }
+/*fn main(){
+    run_test_compressed();
+    run_test();
+}*/

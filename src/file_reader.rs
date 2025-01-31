@@ -45,18 +45,26 @@ impl FileReader {
         let mut number_lines = 0;
         match self {
             FileReader::Standard(reader) => {
-                for _line in reader.lines() {
-                    number_lines += 1;
+                let mut buffer = [0; 8192];
+                while let Ok(n) = reader.read(&mut buffer) {
+                    if n == 0 { break; }
+                    number_lines += buffer[..n].iter()
+                        .filter(|&&byte| byte == b'\n')
+                        .count();
                 }
                 self.seek(0);
             },
             FileReader::BGZF(reader) => {
-                for _line in reader.lines() {
-                    number_lines += 1;
+                let mut buffer = [0; 8192];
+                while let Ok(n) = reader.read(&mut buffer) {
+                    if n == 0 { break; }
+                    number_lines += buffer[..n].iter()
+                        .filter(|&&byte| byte == b'\n')
+                        .count();
                 }
                 self.seek(0);
             },
         }
-        return number_lines;
+        return number_lines as u64;
     }
 }
