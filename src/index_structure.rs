@@ -55,14 +55,17 @@ pub struct IndexStructure{
     blocks_buffer: [u8; BLOCK_BUFFER_SIZE],
     block_first_free: u64,
     blocks_buffer_used: usize,
+    block_buffer_output_offset: u64,
     in_memory_map_size: u64,
     margin_l: u64,
     margin_h: u64
 }
 
 impl IndexStructure{
-    pub fn new(filename: String, header: Header, in_memory_map_size: u64) -> IndexStructure{
+    pub fn new(filename: String, header: Header, mut in_memory_map_size: u64) -> IndexStructure{
         let hashmap_size = header.hashmap_size;
+        in_memory_map_size = min(in_memory_map_size, hashmap_size);
+
         let mut structure =  IndexStructure{
             file_writer: FileWriter::get_writer(format!("{}.index", filename)),
             header,
@@ -70,6 +73,7 @@ impl IndexStructure{
             blocks_buffer: [0; BLOCK_BUFFER_SIZE],
             block_first_free:0,
             blocks_buffer_used:0,
+            block_buffer_output_offset:0,
             in_memory_map_size:in_memory_map_size,
             margin_l:0,
             margin_h:min(in_memory_map_size, hashmap_size)
@@ -77,23 +81,14 @@ impl IndexStructure{
 
         //Write header to index file
         structure.file_writer.write_all(&(structure.header).to_bytes()).unwrap();
-        //Write empty hashmap
-        const CHUNK_SIZE: usize = 1024*8;
-        let total_bytes = hashmap_size as usize * (HASHMAP_ENTRY_SIZE as usize);
-        let mut remaining = total_bytes;
-        let chunk = vec![255; CHUNK_SIZE];
-        while remaining > 0 {
-            let to_write = remaining.min(CHUNK_SIZE);
-            structure.file_writer.write_all(&chunk[..to_write]).unwrap();
-            remaining -= to_write;
-        }
 
         //In-memory structure for the hashmap (TODO: might have to do on-disk)
-        structure.index_map = (0..hashmap_size).map(|_| IndexEntry::new_null()).collect::<Vec<_>>();
+        structure.index_map = (0..min(hashmap_size,in_memory_map_size)).map(|_| IndexEntry::new_null()).collect::<Vec<_>>();
 
         //Keep indexes where to write the blocks
         let block_starting_address: u64 = (hashmap_size as u64 * HASHMAP_ENTRY_SIZE as u64) + (structure.header.get_header_size() as u64);
         structure.block_first_free = block_starting_address;
+        structure.block_buffer_output_offset = block_starting_address;
         //Set buffer for block part of the index
         structure.blocks_buffer_used = 0;
         let _ = structure.file_writer.seek(io::SeekFrom::Start(block_starting_address));
@@ -101,7 +96,12 @@ impl IndexStructure{
         return structure;
     }
 
-    pub fn add_entry(&mut self, hash: u64, file_offset: u64){
+    pub fn add_entry(&mut self, mut hash: u64, file_offset: u64){
+        if hash<self.margin_l || hash>= self.margin_h{
+            return;
+        }
+        hash -= self.margin_l;
+
         let current_index = &self.index_map[hash as usize];
         match current_index.get_type(){
             IndexEntryType::NULL => {self.index_map[hash as usize] = IndexEntry::new_direct(file_offset);}
@@ -126,23 +126,30 @@ impl IndexStructure{
     }
 
     pub fn next(&mut self) -> bool{
-        if self.blocks_buffer_used > 0 {
-            self.flush_block_buffer(self.blocks_buffer_used);
-        }
         self.file_writer.seek(io::SeekFrom::Start(
             self.header.get_header_size() as u64 + (self.margin_l*(HASHMAP_ENTRY_SIZE as u64))
         )).unwrap();
-        for i in self.margin_l..self.margin_h {
+        for i in 0..min(self.margin_h, self.in_memory_map_size) {
             self.file_writer.write_all(&self.index_map[i as usize].to_be_bytes()).unwrap();
         }
+
         self.margin_l = self.margin_h;
         self.margin_h = min(self.margin_h+self.in_memory_map_size, self.header.hashmap_size);
-        return self.margin_l < self.header.hashmap_size-1
+        let keep_on = self.margin_l < self.header.hashmap_size-1;
+        if keep_on{
+            self.index_map = (0..self.in_memory_map_size).map(|_| IndexEntry::new_null()).collect::<Vec<_>>();
+        }
+        let _ = self.file_writer.seek(io::SeekFrom::Start(self.block_buffer_output_offset));
+        if self.blocks_buffer_used > 0 {
+            self.flush_block_buffer(self.blocks_buffer_used);
+        }
+        return keep_on
     }
 
     pub fn flush_block_buffer(&mut self, to: usize){
         let _ = self.file_writer.write_all(&self.blocks_buffer[..to]);
         self.blocks_buffer_used = 0;
+        self.block_buffer_output_offset += to as u64;
     }
 
 }

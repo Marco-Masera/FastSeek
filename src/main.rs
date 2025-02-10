@@ -200,7 +200,7 @@ fn main_() {
     }
 }
 fn main(){
-    run_test_compressed();
-    run_test(1000);
-    run_test(5);
+    //run_test_compressed();
+    run_test(10000);
+    //run_test(5);
 }
