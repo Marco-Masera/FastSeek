@@ -17,20 +17,10 @@ Generic indexer:
         --separator <default: \t>
         --print-duplicates: this flag prints all lines with the keyword, if more than one exist
 
-Index file structure:
->Indexes: fixed length (64 * hashmap size)
-    -Implicit map: <hash value>(position) -> index in block or 0
->Blocks: variable length (byte indexed)
-    -Each entry is 64 x 2:
-        -First int: offset in original file of the entry 
-        -Second int: next block (linked-list-like) or 0
-    Ottimizzazione::
-        -Direct: se non ci sono conflitti, indice direttamente in hashtable
-            -Se conflitti, usa blocchi
-        -Usa primo bit dei 64 per distinguere puntatore a file da puntatore a blocco!
-
-
     TODO:
+    -Hashmap >> RAM 
+        >Decision if to iterate multiple times on original file or move cursor on output file
+    -Multithreading 
     Nuovo flag - allow duplicates:
         -In caso duplicati, stampali tutti
         -Conviene di default attivare contiguous blocks
@@ -44,17 +34,17 @@ Index file structure:
         -Indexing è significativamente più lento.
     Quando lanci index:
         -Stampa opzioni e raccomandazioni (es using linked-list blocks, not good for datasets with many duplicates)
-    Multithreading
+
 
 
 Banchmarking:
     >50M records:
-        TIME: (RELEASE mode (optimizations ON))
+        TIME: (RELEASE mode (optimizations ON)) vs 16 seconds of zcat > ..
             -6 seconds with no hashmap-size
             -4 seconds??? - hashmap_size as num_lines
             -4 seconds  - hasmap_size as 2*num_lines
             -5 seconds in RELEASE mode + hashmap_size specified as 4*num_lines
-                vs 16 seconds of zcat > ..
+                
             -Search - instant
         SPACE:
             -216M index 
@@ -64,3 +54,17 @@ Banchmarking:
 
     ==> With new optimization, smaller hashamp is not a problem anymore
         -Good, no need to waste space with larger hashmaps
+
+Banchmarking:
+    >500M records:
+        TIME: (RELEASE mode (optimizations ON)) vs 11s x of cat | wc -l
+            -1m5s with no --hashmap 
+            -45s  with --hashmap = num_lines
+        SPACE:
+            -1.7G index vs 28G data
+    
+    >Full file, compressed:
+        -zcat | wc -l : 15m 34s  => Very close to csv_indexer
+        -Index - no --hashmap: 18m 4s
+        -Index, hashmap: 9m26.410s
+        -SAMTOOLS: next

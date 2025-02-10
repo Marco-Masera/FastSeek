@@ -1,22 +1,21 @@
 mod file_reader;
 mod file_writer;
 mod header;
+mod index_structure;
 
 use std::fs::File;
-use std::io::{self, BufRead, Seek};
+use std::io::{self};
 use std::path::Path;
 use std::io::Write;
 use std::vec;
-use bgzip::{BGZFReader, BGZFWriter, Compression};
+use bgzip::{BGZFWriter, Compression};
 use clap::Parser;
 use stable_hash::fast_stable_hash;
 use file_reader::FileReader;
-use file_writer::FileWriter;
+use index_structure::{IndexStructure, IndexEntry, IndexEntryType, HASHMAP_ENTRY_SIZE};
 
 
 const CURRENT_VERSION: u8 = 0;
-const HASHMAP_ENTRY_SIZE: u8 = 8;
-const BLOCK_BUFFER_SIZE:usize = 1024*50*8;
 
 
 fn hash_function(value: &str, hashmap_size: u128) -> u64 {
@@ -24,49 +23,7 @@ fn hash_function(value: &str, hashmap_size: u128) -> u64 {
     return r as u64;
 }
 
-#[derive(PartialEq, Eq)]
-enum IndexEntryType{
-    Direct,
-    Indirect,
-    NULL
-}
-struct IndexEntry{
-    index: u64
-}
-impl IndexEntry{
-    fn get_type(&self) -> IndexEntryType{
-        if self.index == u64::MAX {
-            return IndexEntryType::NULL;
-        }
-        if self.index & 0x8000000000000000 == 0{
-            return IndexEntryType::Direct;
-        }
-        return IndexEntryType::Indirect;
-    }
-    fn get_offset(&self) -> u64{
-        return self.index & 0x7FFFFFFFFFFFFFFF;
-    }
-    fn new_direct(offset: u64) -> IndexEntry{
-        return IndexEntry{index: offset};
-    }
-    fn new_indirect(offset: u64) -> IndexEntry{
-        return IndexEntry{index: offset | 0x8000000000000000};
-    }
-    fn new_null() -> IndexEntry{
-        return IndexEntry{index: u64::MAX};
-    }
-    fn to_be_bytes(&self) -> [u8; 8]{
-        return self.index.to_be_bytes();
-    }
-    fn from_be_bytes(bytes: [u8; 8]) -> IndexEntry{
-        return IndexEntry{index: u64::from_be_bytes(bytes)};
-    }
-}
 
-
-fn flush_buffer(output_writer: &mut FileWriter, buffer: [u8; BLOCK_BUFFER_SIZE], to: usize){
-    let _ = output_writer.write_all(&buffer[..to]);
-}
 
 
 fn index(filename: String, column: usize, mut hashmap_size: u128, separator: String) {
@@ -76,7 +33,6 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
         true => FileReader::get_gz_reader(&filename),
         false => FileReader::get_reader(&filename),
     };
-
     //If unspecified, set hashmap_size to number of lines
     if hashmap_size == 0 {
         hashmap_size = input_reader.num_lines() as u128;
@@ -84,38 +40,11 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
 
     //Create header object
     let header = header::Header::new(CURRENT_VERSION, hashmap_size as u64);
-
-    //Create writer
-    let mut output_writer = FileWriter::get_writer(format!("{}.index", filename));
-
-    //Write header to index file
-    output_writer.write_all(&header.to_bytes()).unwrap();
-    //Write empty hashmap
-    const CHUNK_SIZE: usize = 1024*8;
-    let total_bytes = hashmap_size as usize * (HASHMAP_ENTRY_SIZE as usize);
-    let mut remaining = total_bytes;
-    let chunk = vec![255; CHUNK_SIZE];
-    while remaining > 0 {
-        let to_write = remaining.min(CHUNK_SIZE);
-        output_writer.write_all(&chunk[..to_write]).unwrap();
-        remaining -= to_write;
-    }
-
-    //Keep indexes where to write the blocks
-    let block_starting_address: u64 = (hashmap_size as u64 * HASHMAP_ENTRY_SIZE as u64) + (header.get_header_size() as u64);
-    let mut block_first_free: u64 = block_starting_address;
-    //In-memory structure for the hashmap (TODO: might have to do on-disk)
-    let mut index_map: Vec<IndexEntry> = (0..hashmap_size).map(|_| IndexEntry::new_null()).collect::<Vec<_>>();
-
+    //Create the index structure
+    let mut index_structure = IndexStructure::new(filename, header);
+    
     let mut line = String::new();
     let mut offset_on_original_file: u64 = 0;
-
-    let mut debug_conflicts = 0;
-    let mut debug_conflicts_second = 0;
-
-    let mut blocks_buffer: [u8; BLOCK_BUFFER_SIZE] = [0; BLOCK_BUFFER_SIZE];
-    let mut blocks_buffer_used = 0;
-    output_writer.seek(io::SeekFrom::Start(block_starting_address));
     loop {
         let bytes_read = input_reader.read_line(&mut line).unwrap();
         if bytes_read == 0 {
@@ -125,49 +54,13 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
         let value = parts.nth(column).unwrap();
         let hash = hash_function(value, hashmap_size);
 
-        let current_index = &index_map[hash as usize];
-        match current_index.get_type(){
-            IndexEntryType::NULL => {index_map[hash as usize] = IndexEntry::new_direct(offset_on_original_file);}
-            IndexEntryType::Indirect => {
-                debug_conflicts +=1; debug_conflicts_second += 1;
-                /*add_to_output_blocks(
-                    &mut output_writer, block_first_free, 
-                    offset_on_original_file, current_index.index
-                );*/
-                blocks_buffer[blocks_buffer_used..blocks_buffer_used+8].copy_from_slice(&offset_on_original_file.to_be_bytes());
-                blocks_buffer[blocks_buffer_used+8..blocks_buffer_used+16].copy_from_slice(&current_index.index.to_be_bytes());
-                index_map[hash as usize] = IndexEntry::new_indirect(block_first_free);
-                block_first_free += 16;
-                blocks_buffer_used += 16;
-            }
-            IndexEntryType::Direct => {
-                debug_conflicts +=1;
-                /*add_to_output_blocks(
-                    &mut output_writer, block_first_free, 
-                    current_index.get_offset(), IndexEntry::new_direct(offset_on_original_file).index
-                );*/
-                blocks_buffer[blocks_buffer_used..blocks_buffer_used+8].copy_from_slice(&current_index.get_offset().to_be_bytes());
-                blocks_buffer[blocks_buffer_used+8..blocks_buffer_used+16].copy_from_slice(&IndexEntry::new_direct(offset_on_original_file).index.to_be_bytes());
-                index_map[hash as usize] = IndexEntry::new_indirect(block_first_free);
-                block_first_free += 16;
-                blocks_buffer_used += 16;
-            }
-        }
+        index_structure.add_entry(hash, offset_on_original_file);
+
         offset_on_original_file += bytes_read as u64;
         line.clear();
-        if blocks_buffer_used == BLOCK_BUFFER_SIZE{
-            flush_buffer(&mut output_writer, blocks_buffer, BLOCK_BUFFER_SIZE);
-            blocks_buffer_used = 0;
-        }
     }
-    if blocks_buffer_used > 0 {
-        flush_buffer(&mut output_writer, blocks_buffer, blocks_buffer_used);
-    }
-    println!("C {} slC: {}", debug_conflicts, debug_conflicts_second);
-    output_writer.seek(io::SeekFrom::Start(header.get_header_size().into())).unwrap();
-    for i in 0..hashmap_size {
-        output_writer.write_all(&index_map[i as usize].to_be_bytes()).unwrap();
-    }
+    index_structure.finalize();
+    
 }
 
 fn search(keyword: String, filename: String, column: usize, separator: String) -> bool{
@@ -285,7 +178,7 @@ fn run_test_compressed(){
 
 mod command_line_tool;
 use command_line_tool::{Cli, Commands};
-fn main() {
+fn main_() {
     //index("data.csv".to_string(), 0, 0, ",".to_string());
     //search("prova2".to_string(), "data.csv".to_string(), 0, 0, ",".to_string());
     let cli = Cli::parse();
@@ -302,7 +195,7 @@ fn main() {
          }
     }
 }
-fn test(){
+fn main(){
     run_test_compressed();
     run_test();
 }
