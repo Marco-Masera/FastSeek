@@ -20,6 +20,8 @@ Generic indexer:
     TODO:
     -Hashmap >> RAM 
         >Decision if to iterate multiple times on original file or move cursor on output file
+        >Now always iterate on file 
+        
     -Multithreading 
     Nuovo flag - allow duplicates:
         -In caso duplicati, stampali tutti

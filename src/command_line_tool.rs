@@ -28,6 +28,11 @@ pub enum Commands {
         /// It is recommended to set this value to a value similar to the number of lines in the original file.
         #[arg(long, default_value = "0")]
         hashmap_size: u128,
+
+        /// Max size of in-memory hashmap, number of entries. Each entry takes 8 bytes.
+        /// If the hashmap is larger than the allowed in-memory hashmap, input file will be iterated multiple times.
+        #[arg(long, default_value = "2000000000")]
+        in_memory_map_size: u64
     },
 
     /// Search for keywords in an indexed file

@@ -26,7 +26,7 @@ fn hash_function(value: &str, hashmap_size: u128) -> u64 {
 
 
 
-fn index(filename: String, column: usize, mut hashmap_size: u128, separator: String) {
+fn index(filename: String, column: usize, mut hashmap_size: u128, separator: String, in_memory_map_size: u64) {
     let is_compressed = filename.ends_with(".gz");
     //Create reader
     let mut input_reader: FileReader = match is_compressed{
@@ -41,25 +41,29 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
     //Create header object
     let header = header::Header::new(CURRENT_VERSION, hashmap_size as u64);
     //Create the index structure
-    let mut index_structure = IndexStructure::new(filename, header);
+    let mut index_structure = IndexStructure::new(filename, header, in_memory_map_size);
     
     let mut line = String::new();
-    let mut offset_on_original_file: u64 = 0;
-    loop {
-        let bytes_read = input_reader.read_line(&mut line).unwrap();
-        if bytes_read == 0 {
+    loop{
+        let mut offset_on_original_file: u64 = 0;
+        loop {
+            let bytes_read = input_reader.read_line(&mut line).unwrap();
+            if bytes_read == 0 {
+                break;
+            }
+            let mut parts = line.split(&separator);
+            let value = parts.nth(column).unwrap();
+            let hash = hash_function(value, hashmap_size);
+
+            index_structure.add_entry(hash, offset_on_original_file);
+
+            offset_on_original_file += bytes_read as u64;
+            line.clear();
+        }
+        if !index_structure.next(){
             break;
         }
-        let mut parts = line.split(&separator);
-        let value = parts.nth(column).unwrap();
-        let hash = hash_function(value, hashmap_size);
-
-        index_structure.add_entry(hash, offset_on_original_file);
-
-        offset_on_original_file += bytes_read as u64;
-        line.clear();
     }
-    index_structure.finalize();
     
 }
 
@@ -142,7 +146,7 @@ fn search(keyword: String, filename: String, column: usize, separator: String) -
     }
 }
 
-fn run_test(){
+fn run_test(in_memory_map_size: u64){
     let path = Path::new("test.csv");
     let file = File::create(&path).unwrap();
     let mut writer = io::BufWriter::new(file);
@@ -152,7 +156,7 @@ fn run_test(){
         //writer.write_line();
     }
     let _ = writer.flush();
-    index("test.csv".to_string(), 1, 0, ",".to_string());
+    index("test.csv".to_string(), 1, 0, ",".to_string(), in_memory_map_size);
     for i in 0..100 {
         assert! (search(format!("prova{}", i), "test.csv".to_string(), 1, ",".to_string()));
     }
@@ -169,7 +173,7 @@ fn run_test_compressed(){
     }
     let _ = writer.flush();
     let _ = writer.close();
-    index("test.csv.gz".to_string(), 1, 0, ",".to_string());
+    index("test.csv.gz".to_string(), 1, 0, ",".to_string(),1000);
     for i in 0..100 {
         assert! (search(format!("prova{}", i), "test.csv.gz".to_string(), 1, ",".to_string()));
     }
@@ -183,19 +187,20 @@ fn main_() {
     //search("prova2".to_string(), "data.csv".to_string(), 0, 0, ",".to_string());
     let cli = Cli::parse();
     match cli.command {
-        Commands::Index { filename, column, separator, hashmap_size } => {
-            index(filename, column, hashmap_size, separator);
+        Commands::Index { filename, column, separator, hashmap_size, in_memory_map_size} => {
+            index(filename, column, hashmap_size, separator, in_memory_map_size);
         }
         Commands::Search { filename, keyword, column, separator, print_duplicates } => {
             search(keyword, filename, column, separator);
         }
         Commands::Test{} => { 
             run_test_compressed();
-            run_test();
+            run_test(2000000000);
          }
     }
 }
 fn main(){
     run_test_compressed();
-    run_test();
+    run_test(1000);
+    run_test(5);
 }

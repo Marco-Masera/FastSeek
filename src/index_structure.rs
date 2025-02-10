@@ -3,6 +3,7 @@ use crate::header;
 use file_writer::FileWriter;
 use header::Header;
 use std::io::{self};
+use std::cmp::min;
 
 pub const HASHMAP_ENTRY_SIZE: u8 = 8;
 const BLOCK_BUFFER_SIZE:usize = 1024*50*8;
@@ -53,21 +54,27 @@ pub struct IndexStructure{
     index_map: Vec<IndexEntry>,
     blocks_buffer: [u8; BLOCK_BUFFER_SIZE],
     block_first_free: u64,
-    blocks_buffer_used: usize
+    blocks_buffer_used: usize,
+    in_memory_map_size: u64,
+    margin_l: u64,
+    margin_h: u64
 }
 
 impl IndexStructure{
-    pub fn new(filename: String, header: Header) -> IndexStructure{
+    pub fn new(filename: String, header: Header, in_memory_map_size: u64) -> IndexStructure{
+        let hashmap_size = header.hashmap_size;
         let mut structure =  IndexStructure{
             file_writer: FileWriter::get_writer(format!("{}.index", filename)),
             header,
             index_map: vec![],
             blocks_buffer: [0; BLOCK_BUFFER_SIZE],
             block_first_free:0,
-            blocks_buffer_used:0
+            blocks_buffer_used:0,
+            in_memory_map_size:in_memory_map_size,
+            margin_l:0,
+            margin_h:min(in_memory_map_size, hashmap_size)
         };
 
-        let hashmap_size = structure.header.hashmap_size;
         //Write header to index file
         structure.file_writer.write_all(&(structure.header).to_bytes()).unwrap();
         //Write empty hashmap
@@ -118,18 +125,24 @@ impl IndexStructure{
         }
     }
 
+    pub fn next(&mut self) -> bool{
+        if self.blocks_buffer_used > 0 {
+            self.flush_block_buffer(self.blocks_buffer_used);
+        }
+        self.file_writer.seek(io::SeekFrom::Start(
+            self.header.get_header_size() as u64 + (self.margin_l*(HASHMAP_ENTRY_SIZE as u64))
+        )).unwrap();
+        for i in self.margin_l..self.margin_h {
+            self.file_writer.write_all(&self.index_map[i as usize].to_be_bytes()).unwrap();
+        }
+        self.margin_l = self.margin_h;
+        self.margin_h = min(self.margin_h+self.in_memory_map_size, self.header.hashmap_size);
+        return self.margin_l < self.header.hashmap_size-1
+    }
+
     pub fn flush_block_buffer(&mut self, to: usize){
         let _ = self.file_writer.write_all(&self.blocks_buffer[..to]);
         self.blocks_buffer_used = 0;
     }
 
-    pub fn finalize(&mut self){
-        if self.blocks_buffer_used > 0 {
-            self.flush_block_buffer(self.blocks_buffer_used);
-        }
-        self.file_writer.seek(io::SeekFrom::Start(self.header.get_header_size().into())).unwrap();
-        for i in 0..self.header.hashmap_size {
-            self.file_writer.write_all(&self.index_map[i as usize].to_be_bytes()).unwrap();
-        }
-    }
 }
