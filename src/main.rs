@@ -63,6 +63,7 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
         if !index_structure.next(){
             break;
         }
+        input_reader.seek(0);
     }
     
 }
@@ -201,6 +202,6 @@ fn main_() {
 }
 fn main(){
     //run_test_compressed();
-    run_test(10000);
-    //run_test(5);
+    //run_test(10000);
+    run_test(5);
 }

@@ -143,6 +143,7 @@ impl IndexStructure{
         if self.blocks_buffer_used > 0 {
             self.flush_block_buffer(self.blocks_buffer_used);
         }
+        println!("Iteration");
         return keep_on
     }
 
