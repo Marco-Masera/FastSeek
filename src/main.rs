@@ -11,7 +11,7 @@ use std::vec;
 use bgzip::{BGZFWriter, Compression};
 use clap::Parser;
 use stable_hash::fast_stable_hash;
-use file_reader::FileReader;
+use file_reader::{FileReader, InputReader};
 use index_structure::{IndexStructure, IndexEntry, IndexEntryType, HASHMAP_ENTRY_SIZE};
 
 
@@ -29,13 +29,14 @@ fn hash_function(value: &str, hashmap_size: u128) -> u64 {
 fn index(filename: String, column: usize, mut hashmap_size: u128, separator: String, in_memory_map_size: u64) {
     let is_compressed = filename.ends_with(".gz");
     //Create reader
-    let mut input_reader: FileReader = match is_compressed{
+    let mut file_input_reader: FileReader = match is_compressed{
         true => FileReader::get_gz_reader(&filename),
         false => FileReader::get_reader(&filename),
     };
+    let mut input_reader: InputReader = InputReader::new(file_input_reader);
     //If unspecified, set hashmap_size to number of lines
     if hashmap_size == 0 {
-        hashmap_size = input_reader.num_lines() as u128;
+        hashmap_size = input_reader.num_entries() as u128;
     }
 
     //Create header object
@@ -45,25 +46,21 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
     
     let mut line = String::new();
     loop{
-        let mut offset_on_original_file: u64 = 0;
         loop {
-            let bytes_read = input_reader.read_line(&mut line).unwrap();
-            if bytes_read == 0 {
+            let offset = input_reader.get_entry(&mut line);
+            if offset == 0xFFFFFFFFFFFFFFFF {
                 break;
             }
             let mut parts = line.split(&separator);
             let value = parts.nth(column).unwrap();
             let hash = hash_function(value, hashmap_size);
-
-            index_structure.add_entry(hash, offset_on_original_file);
-
-            offset_on_original_file += bytes_read as u64;
+            index_structure.add_entry(hash, offset as u64);
             line.clear();
         }
         if !index_structure.next(){
             break;
         }
-        input_reader.seek(0);
+        input_reader.reset();
     }
     
 }
@@ -201,7 +198,7 @@ fn main_() {
     }
 }
 fn main(){
-    //run_test_compressed();
-    //run_test(10000);
+    run_test_compressed();
+    run_test(10000);
     run_test(5);
 }

@@ -126,11 +126,30 @@ impl IndexStructure{
     }
 
     pub fn next(&mut self) -> bool{
+        //Write hashmap from memory to file
         self.file_writer.seek(io::SeekFrom::Start(
             self.header.get_header_size() as u64 + (self.margin_l*(HASHMAP_ENTRY_SIZE as u64))
         )).unwrap();
-        for i in 0..min(self.margin_h, self.in_memory_map_size) {
-            self.file_writer.write_all(&self.index_map[i as usize].to_be_bytes()).unwrap();
+        let buf_capacity = 1080*8;
+        let mut buffer: Vec<u8> = Vec::with_capacity(buf_capacity);
+        //Using unsafe for direct pointer access and faster runtime
+        //"Cowards die many times before their deaths; the valiant never taste of death but once" -William Shakespeare
+        for chunk in self.index_map.chunks(buf_capacity/8){
+            let bytes_needed = chunk.len() * 8;
+            unsafe {
+                buffer.clear();
+                buffer.set_len(bytes_needed);
+                let dest = buffer.as_mut_ptr();
+                for (i, item) in chunk.iter().enumerate() {
+                    let bytes = item.to_be_bytes();
+                    std::ptr::copy_nonoverlapping(
+                        bytes.as_ptr(),
+                        dest.add(i * 8),
+                        8
+                    );
+                }
+            }
+            self.file_writer.write_all(&buffer[..bytes_needed]).unwrap();
         }
 
         self.margin_l = self.margin_h;

@@ -68,3 +68,29 @@ impl FileReader {
         return number_lines as u64;
     }
 }
+
+pub struct InputReader{
+    file_reader: FileReader,
+    offset: usize
+}
+impl InputReader{
+    pub fn new(file_reader: FileReader) -> InputReader{
+        return InputReader{file_reader:file_reader, offset:0};
+    }
+    pub fn get_entry(&mut self, buffer: &mut String) -> usize{
+        let bytes_read = self.file_reader.read_line(buffer).unwrap();
+        if bytes_read == 0{
+            return 0xFFFFFFFFFFFFFFFF;
+        };
+        let return_value = self.offset;
+        self.offset = self.offset + bytes_read;
+        return return_value;
+    }
+    pub fn reset(&mut self){
+        self.file_reader.seek(0);
+        self.offset = 0;
+    }
+    pub fn num_entries(&mut self) -> u64{
+        return self.file_reader.num_lines();
+    }
+}
