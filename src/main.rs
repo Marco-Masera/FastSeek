@@ -23,13 +23,10 @@ fn hash_function(value: &str, hashmap_size: u128) -> u64 {
     return r as u64;
 }
 
-
-
-
 fn index(filename: String, column: usize, mut hashmap_size: u128, separator: String, in_memory_map_size: u64) {
     let is_compressed = filename.ends_with(".gz");
     //Create reader
-    let mut file_input_reader: FileReader = match is_compressed{
+    let file_input_reader: FileReader = match is_compressed{
         true => FileReader::get_gz_reader(&filename),
         false => FileReader::get_reader(&filename),
     };
@@ -43,7 +40,6 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
     let header = header::Header::new(CURRENT_VERSION, hashmap_size as u64);
     //Create the index structure
     let mut index_structure = IndexStructure::new(filename, header, in_memory_map_size);
-    
     let mut line = String::new();
     loop{
         loop {
@@ -180,9 +176,7 @@ fn run_test_compressed(){
 
 mod command_line_tool;
 use command_line_tool::{Cli, Commands};
-fn main_() {
-    //index("data.csv".to_string(), 0, 0, ",".to_string());
-    //search("prova2".to_string(), "data.csv".to_string(), 0, 0, ",".to_string());
+fn main() {
     let cli = Cli::parse();
     match cli.command {
         Commands::Index { filename, column, separator, hashmap_size, in_memory_map_size} => {
@@ -192,12 +186,11 @@ fn main_() {
             search(keyword, filename, column, separator);
         }
         Commands::Test{} => { 
-            run_test_compressed();
-            run_test(2000000000);
+            //
          }
     }
 }
-fn main(){
+fn test(){
     run_test_compressed();
     run_test(10000);
     run_test(5);

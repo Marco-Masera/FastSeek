@@ -32,7 +32,7 @@ pub enum Commands {
         /// Max size of in-memory hashmap, number of entries. Each entry takes 8 bytes.
         /// If the hashmap is larger than the allowed in-memory hashmap, input file will be iterated multiple times.
         #[arg(long, default_value = "2000000000")]
-        in_memory_map_size: u64
+        in_memory_map_size: u64,
     },
 
     /// Search for keywords in an indexed file
@@ -51,7 +51,8 @@ pub enum Commands {
         #[arg(long,short = 's', default_value = "\t")]
         separator: String,
 
-        /// Print all matching lines when duplicates exist
+        /// Print all matching lines when duplicates exist.
+        /// Note: this tool is not particularly optimized for dataset with many duplicates.
         #[arg(long)]
         print_duplicates: bool,
     },
