@@ -233,15 +233,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "csv_indexer"
-version = "0.1.0"
-dependencies = [
- "bgzip",
- "clap",
- "stable-hash",
-]
-
-[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -255,6 +246,15 @@ name = "either"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
+
+[[package]]
+name = "fastseek"
+version = "0.1.0"
+dependencies = [
+ "bgzip",
+ "clap",
+ "stable-hash",
+]
 
 [[package]]
 name = "firestorm"

@@ -43,7 +43,7 @@ fn index(input_reader: &mut impl InputReader, filename: String, mut hashmap_size
             if offset == 0xFFFFFFFFFFFFFFFF {
                 break;
             }
-            if (line.ends_with("\n") || line.ends_with("\r")) {
+            if line.ends_with("\n") || line.ends_with("\r") {
                 line.pop();
             }
             let hash = hash_function(&line, hashmap_size);
@@ -258,13 +258,18 @@ fn run_test(in_memory_map_size: u64){
     let mut writer = io::BufWriter::new(file);
     for i in 0..TEST_LEN {
         let string = format!("prova{}", i);
-        let _ = writer.write_all(format!("1,{},0,0,0,eruheigrneiugrheriuhg,ergbneirgbeiugberiugberiuhg\n", string).as_bytes());
+        let _ = writer.write_all(format!("1,{},0,0,0,eruheigrnei,L{}\n", string, string).as_bytes());
         //writer.write_line();
     }
     let _ = writer.flush();
     index_tabular("test.csv".to_string(), 1, ",".to_string(), 0, in_memory_map_size);
     for i in 0..TEST_LEN {
         assert! (search(format!("prova{}", i), "test.csv".to_string()));
+    }
+    assert! (!search("NOT_EXISTING".to_string(), "test.csv".to_string()));
+    index_tabular("test.csv".to_string(), 6, ",".to_string(), 0, in_memory_map_size);
+    for i in 0..TEST_LEN {
+        assert! (search(format!("Lprova{}", i), "test.csv".to_string()));
     }
     assert! (!search("NOT_EXISTING".to_string(), "test.csv".to_string()));
 }
@@ -289,6 +294,6 @@ fn test(){
     run_test_fastq(1000);
     run_test_fasta(1000);
     run_test(10000);
-    //run_test_compressed();
-    //run_test(6);
+    run_test_compressed();
+    run_test(6);
 }

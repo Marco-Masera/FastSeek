@@ -139,7 +139,7 @@ impl InputReader for TabularInputReader<'_>{
         self.file_reader.seek(offset);
         self.file_reader.read_line(buffer).unwrap();
         let mut parts = buffer.split(self.separator);
-        let key = parts.nth(self.column).unwrap();
+        let key = parts.nth(self.column).unwrap().trim();
         return key == value;
     }
 }
