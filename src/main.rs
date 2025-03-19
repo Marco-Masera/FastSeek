@@ -3,6 +3,7 @@ mod file_writer;
 mod header;
 mod index_structure;
 
+use core::hash;
 use std::fs::File;
 use std::io::{self};
 use std::path::Path;
@@ -40,6 +41,7 @@ fn index(filename: String, column: usize, mut hashmap_size: u128, separator: Str
     let header = header::Header::new(CURRENT_VERSION, hashmap_size as u64);
     //Create the index structure
     let mut index_structure = IndexStructure::new(filename, header, in_memory_map_size);
+    hashmap_size = index_structure.header.hashmap_size as u128;
     let mut line = String::new();
     loop{
         loop {
@@ -191,7 +193,7 @@ fn main() {
     }
 }
 fn test(){
-    run_test_compressed();
-    run_test(10000);
-    run_test(5);
+    //run_test_compressed();
+    //run_test(10000);
+    run_test(6);
 }

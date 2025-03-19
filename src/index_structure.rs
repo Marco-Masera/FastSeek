@@ -2,11 +2,14 @@ use crate::file_writer;
 use crate::header;
 use file_writer::FileWriter;
 use header::Header;
+use core::hash;
 use std::io::{self};
 use std::cmp::min;
 
 pub const HASHMAP_ENTRY_SIZE: u8 = 8;
 const BLOCK_BUFFER_SIZE:usize = 1024*50*8;
+//Allow reducing hashmap_size to a maximum of this percentage to remove the last iteration over file
+const HASHMAP_REDUCING_FACTOR: u64 = 10;//%
 
 #[derive(PartialEq, Eq)]
 pub enum IndexEntryType{
@@ -50,7 +53,7 @@ impl IndexEntry{
 
 pub struct IndexStructure{
     file_writer: FileWriter,
-    header: Header,
+    pub header: Header,
     index_map: Vec<IndexEntry>,
     blocks_buffer: [u8; BLOCK_BUFFER_SIZE],
     block_first_free: u64,
@@ -62,9 +65,20 @@ pub struct IndexStructure{
 }
 
 impl IndexStructure{
-    pub fn new(filename: String, header: Header, mut in_memory_map_size: u64) -> IndexStructure{
+    pub fn new(filename: String, mut header: Header, mut in_memory_map_size: u64) -> IndexStructure{
         let hashmap_size = header.hashmap_size;
         in_memory_map_size = min(in_memory_map_size, hashmap_size);
+        
+        //Optimization: if in_map_size < hashmap_size, the program iterates
+        //over input file ceil(hashmap_size/in_map_size) times. Sometimes
+        //it can be worth reducing the hashmap size to a multiple of in_memory_map_size
+        //to avoid the last iteration with a smaller hashmap
+        if (in_memory_map_size < hashmap_size){
+            let last_iter_size: u64 = hashmap_size % in_memory_map_size;
+            if (last_iter_size / hashmap_size) * 100 < HASHMAP_REDUCING_FACTOR{
+                header.hashmap_size -= last_iter_size;
+            }
+        }
 
         let mut structure =  IndexStructure{
             file_writer: FileWriter::get_writer(format!("{}.index", filename)),
