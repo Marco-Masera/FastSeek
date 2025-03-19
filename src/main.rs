@@ -12,7 +12,7 @@ use std::vec;
 use bgzip::{BGZFWriter, Compression};
 use clap::Parser;
 use stable_hash::fast_stable_hash;
-use file_reader::{FileReader, GzFileReader, InputReader, MultiFastaInputReader, StandardFileReader, TabularInputReader};
+use file_reader::{FastqInputReader, FileReader, GzFileReader, InputReader, MultiFastaInputReader, StandardFileReader, TabularInputReader};
 use index_structure::{IndexStructure, IndexEntry, IndexEntryType, HASHMAP_ENTRY_SIZE};
 
 
@@ -87,6 +87,14 @@ fn search(keyword: String, filename: String) -> bool{
             ))
         },
         2  => Box::new(MultiFastaInputReader::new(
+            original_file_reader, true
+        )),
+        3 => {
+            Box::new(FastqInputReader::new(
+                original_file_reader, false
+            ))
+        },
+        4  => Box::new(FastqInputReader::new(
             original_file_reader, true
         )),
         _ => panic!("Index type not supported")
@@ -165,6 +173,16 @@ fn index_fasta(filename: String, index_sequence: bool, hashmap_size: u128, in_me
     );
     index(&mut input_reader, filename, hashmap_size, in_memory_map_size);
 }
+fn index_fastq(filename: String, index_sequence: bool, hashmap_size: u128, in_memory_map_size: u64){
+    let file_input_reader: &mut dyn FileReader = match filename.ends_with(".gz"){
+        true => &mut GzFileReader::new(&filename),
+        false => &mut StandardFileReader::new(&filename),
+    };
+    let mut input_reader: FastqInputReader = FastqInputReader::new(
+        file_input_reader, index_sequence
+    );
+    index(&mut input_reader, filename, hashmap_size, in_memory_map_size);
+}
 
 mod command_line_tool;
 use command_line_tool::{Cli, Commands};
@@ -178,7 +196,7 @@ fn main() {
             index_fasta(filename, by_sequence, hashmap_size, in_memory_map_size);
         }
         Commands::IndexFastq { filename, by_sequence, hashmap_size, in_memory_map_size } => {
-            //
+            index_fastq(filename, by_sequence, hashmap_size, in_memory_map_size);
         }
         Commands::Search { filename, keyword, print_duplicates } => {
             search(keyword, filename);
@@ -190,6 +208,27 @@ fn main() {
 }
 
 const TEST_LEN: u32 = 100;
+
+fn run_test_fastq(in_memory_map_size: u64){
+    let path = Path::new("test.fastq");
+    let file = File::create(&path).unwrap();
+    let mut writer = io::BufWriter::new(file);
+    for i in 0..TEST_LEN {
+        let string = format!("@prova{}", i);
+        let _ = writer.write_all(format!("{}\nGGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}\n+\n!''*((((***+))%%%++)(%%%%).1***-+*''))**55CCF>>>>>>CCCCCCC65\n", string, i).as_bytes());
+    }
+    let _ = writer.flush();
+    index_fastq("test.fastq".to_string(), false, 0, in_memory_map_size);
+    for i in 0..TEST_LEN {
+        assert! (search(format!("@prova{}", i), "test.fastq".to_string()));
+    }
+    assert! (!search("NOT_EXISTING".to_string(), "test.fastq".to_string()));
+    index_fastq("test.fastq".to_string(), true, 0, in_memory_map_size);
+    for i in 0..TEST_LEN {
+        assert! (search(format!("GGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}", i), "test.fastq".to_string()));
+    }
+    assert! (!search("NOT_EXISTING".to_string(), "test.fastq".to_string()));
+}
 
 fn run_test_fasta(in_memory_map_size: u64){
     let path = Path::new("multi.fasta");
@@ -247,6 +286,7 @@ fn run_test_compressed(){
     assert! (!search("NOT_EXISTING".to_string(), "test.csv.gz".to_string()));
 }
 fn test(){
+    run_test_fastq(1000);
     run_test_fasta(1000);
     run_test(10000);
     //run_test_compressed();

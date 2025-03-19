@@ -205,3 +205,72 @@ impl InputReader for MultiFastaInputReader<'_>{
         return true;
     }
 }
+
+
+
+pub struct FastqInputReader<'a>{
+    file_reader: &'a mut dyn FileReader,
+    is_indexing_sequence: bool,
+    offset: usize
+}
+impl<'a> FastqInputReader<'a>{
+    pub fn new(file_reader: &'a mut dyn FileReader, is_indexing_sequence: bool) -> FastqInputReader<'a>{
+        return FastqInputReader{file_reader:file_reader, is_indexing_sequence:is_indexing_sequence, offset:0};
+    }
+}
+
+impl InputReader for FastqInputReader<'_>{
+    fn get_types_for_header(&self) -> (u8, u8, u8) {
+        return (
+            match self.is_indexing_sequence {true => 4, false => 3},
+            0, 
+            0
+        );
+    }
+    fn get_entry(&mut self, buffer: &mut String) -> usize{
+        //read entire line - take advantage of user-provided buffer to store it
+        let return_value = self.offset;
+        let mut throwaway = String::new();
+        let mut bytes_read = 0;
+        if !self.is_indexing_sequence{
+            bytes_read += self.file_reader.read_line(buffer).unwrap();
+            bytes_read += self.file_reader.read_line(&mut throwaway).unwrap();
+            bytes_read += self.file_reader.read_line(&mut throwaway).unwrap();
+            bytes_read += self.file_reader.read_line(&mut throwaway).unwrap();
+        } else {
+            bytes_read += self.file_reader.read_line(&mut throwaway).unwrap();
+            bytes_read += self.file_reader.read_line(buffer).unwrap();
+            bytes_read += self.file_reader.read_line(&mut throwaway).unwrap();
+            bytes_read += self.file_reader.read_line(&mut throwaway).unwrap();
+        }
+        if bytes_read == 0{
+            return 0xFFFFFFFFFFFFFFFF;
+        };
+        self.offset = self.offset + bytes_read;
+        return return_value;
+    }
+    fn reset(&mut self){
+        self.file_reader.seek(0);
+        self.offset = 0;
+    }
+    fn num_entries(&mut self) -> u64{
+        return self.file_reader.num_lines()/4;
+    }
+    fn test_and_return_entry(&mut self, offset: u64, value: &String, buffer: &mut String) -> bool{
+        self.file_reader.seek(offset);
+        _ = self.file_reader.read_line(buffer).unwrap();
+        if !self.is_indexing_sequence && buffer.trim() != value {
+            return false;
+        }
+        let header_size = buffer.len();
+        _ = self.file_reader.read_line(buffer).unwrap();
+        if self.is_indexing_sequence{
+            if &buffer[header_size..].trim() != value {
+                return false;
+            }
+        }
+        _ = self.file_reader.read_line(buffer).unwrap();
+        _ = self.file_reader.read_line(buffer).unwrap();
+        return true;
+    }
+}
