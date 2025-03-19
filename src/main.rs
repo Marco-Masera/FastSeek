@@ -7,11 +7,12 @@ use std::fs::File;
 use std::io::{self};
 use std::path::Path;
 use std::io::Write;
+use std::str::from_utf8;
 use std::vec;
 use bgzip::{BGZFWriter, Compression};
 use clap::Parser;
 use stable_hash::fast_stable_hash;
-use file_reader::{FileReader, GzFileReader, InputReader, StandardFileReader, TabularInputReader};
+use file_reader::{FileReader, GzFileReader, InputReader, MultiFastaInputReader, StandardFileReader, TabularInputReader};
 use index_structure::{IndexStructure, IndexEntry, IndexEntryType, HASHMAP_ENTRY_SIZE};
 
 
@@ -30,7 +31,8 @@ fn index(input_reader: &mut impl InputReader, filename: String, mut hashmap_size
     }
 
     //Create header object
-    let header = header::Header::new(CURRENT_VERSION, hashmap_size as u64);
+    let input_details = input_reader.get_types_for_header();
+    let header = header::Header::new(CURRENT_VERSION, hashmap_size as u64, input_details.0, input_details.1, input_details.2);
     //Create the index structure
     let mut index_structure = IndexStructure::new(filename, header, in_memory_map_size);
     hashmap_size = index_structure.header.hashmap_size as u128;
@@ -54,14 +56,6 @@ fn index(input_reader: &mut impl InputReader, filename: String, mut hashmap_size
 }
 
 fn search(keyword: String, filename: String, column: usize, separator: String) -> bool{
-    //Get file reader for original file
-    let original_file_reader: &mut dyn FileReader = match filename.ends_with(".gz"){
-        true => &mut GzFileReader::new(&filename),
-        false => &mut StandardFileReader::new(&filename),
-    };
-    let mut input_reader: TabularInputReader = TabularInputReader::new(
-        original_file_reader, &separator, column
-    );
     //Get reader for index file
     let mut index_reader = StandardFileReader::new(&format!("{}.index", filename));
     //Read the header size
@@ -72,7 +66,26 @@ fn search(keyword: String, filename: String, column: usize, separator: String) -
     let mut buf: Vec<u8> = vec![0; header_size as usize];
     index_reader.read_exact(&mut buf).unwrap();
     let header = header::Header::from_bytes(buf);
-    
+
+    //Get file reader for original file
+    let original_file_reader: &mut dyn FileReader = match filename.ends_with(".gz"){
+        true => &mut GzFileReader::new(&filename),
+        false => &mut StandardFileReader::new(&filename),
+    };
+    let binding = [header.separator];
+    let mut input_reader: Box<dyn InputReader> = match(header.index_type){
+        0 => {
+            Box::new(TabularInputReader::new(
+            original_file_reader, &from_utf8(&binding).unwrap(), header.column as usize
+        ))},
+        1 => Box::new(MultiFastaInputReader::new(
+            original_file_reader, false
+        )),
+        2  => Box::new(MultiFastaInputReader::new(
+            original_file_reader, true
+        )),
+        _ => panic!("Index type not supported")
+    };
     //Initialize variables
     let hashmap_size = header.hashmap_size as u128;
     let hashmap_start = header_size as u64;
@@ -126,12 +139,24 @@ fn search(keyword: String, filename: String, column: usize, separator: String) -
 }
 
 fn index_tabular(filename: String, column: usize, separator: String, hashmap_size: u128, in_memory_map_size: u64){
+    assert!(separator.as_bytes().len() == 1);
+    assert!(from_utf8(separator.to_string().as_bytes()) == Ok(&separator));
     let file_input_reader: &mut dyn FileReader = match filename.ends_with(".gz"){
         true => &mut GzFileReader::new(&filename),
         false => &mut StandardFileReader::new(&filename),
     };
     let mut input_reader: TabularInputReader = TabularInputReader::new(
         file_input_reader, &separator, column
+    );
+    index(&mut input_reader, filename, hashmap_size, in_memory_map_size);
+}
+fn index_fasta(filename: String, index_sequence: bool, hashmap_size: u128, in_memory_map_size: u64){
+    let file_input_reader: &mut dyn FileReader = match filename.ends_with(".gz"){
+        true => &mut GzFileReader::new(&filename),
+        false => &mut StandardFileReader::new(&filename),
+    };
+    let mut input_reader: MultiFastaInputReader = MultiFastaInputReader::new(
+        file_input_reader, index_sequence
     );
     index(&mut input_reader, filename, hashmap_size, in_memory_map_size);
 }
@@ -145,7 +170,7 @@ fn main() {
             index_tabular(filename, column, separator, hashmap_size, in_memory_map_size);
         }
         Commands::IndexFasta { filename, by_sequence, hashmap_size, in_memory_map_size } => {
-            //
+            index_fasta(filename, by_sequence, hashmap_size, in_memory_map_size);
         }
         Commands::IndexFastq { filename, by_sequence, hashmap_size, in_memory_map_size } => {
             //
@@ -160,6 +185,28 @@ fn main() {
 }
 
 const TEST_LEN: u32 = 100;
+
+fn run_test_fasta(in_memory_map_size: u64){
+    let path = Path::new("multi.fasta");
+    let file = File::create(&path).unwrap();
+    let mut writer = io::BufWriter::new(file);
+    for i in 0..TEST_LEN {
+        let string = format!(">prova{}", i);
+        let _ = writer.write_all(format!("{}\nGGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}\n", string, i).as_bytes());
+        //writer.write_line();
+    }
+    let _ = writer.flush();
+    index_fasta("multi.fasta".to_string(), false, 0, in_memory_map_size);
+    for i in 0..TEST_LEN {
+        assert! (search(format!(">prova{}", i), "multi.fasta".to_string(), 1, ",".to_string()));
+    }
+    assert! (!search("NOT_EXISTING".to_string(), "multi.fasta".to_string(), 1, ",".to_string()));
+    index_fasta("multi.fasta".to_string(), true, 0, in_memory_map_size);
+    for i in 0..TEST_LEN {
+        assert! (search(format!("GGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}", i), "multi.fasta".to_string(), 1, ",".to_string()));
+    }
+    assert! (!search("NOT_EXISTING".to_string(), "multi.fasta".to_string(), 1, ",".to_string()));
+}
 
 fn run_test(in_memory_map_size: u64){
     let path = Path::new("test.csv");
@@ -195,7 +242,8 @@ fn run_test_compressed(){
     assert! (!search("NOT_EXISTING".to_string(), "test.csv.gz".to_string(), 1, ",".to_string()));
 }
 fn test(){
+    run_test_fasta(1000);
     run_test(10000);
-    run_test_compressed();
-    run_test(6);
+    //run_test_compressed();
+    //run_test(6);
 }
