@@ -192,7 +192,7 @@ impl InputReader for MultiFastaInputReader<'_>{
     fn test_and_return_entry(&mut self, offset: u64, value: &String, buffer: &mut String) -> bool{
         self.file_reader.seek(offset);
         _ = self.file_reader.read_line(buffer).unwrap();
-        if !self.is_indexing_sequence && buffer != value{
+        if !self.is_indexing_sequence && buffer.trim() != value {
             return false;
         }
         let header_size = buffer.len();

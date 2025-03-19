@@ -43,6 +43,9 @@ fn index(input_reader: &mut impl InputReader, filename: String, mut hashmap_size
             if offset == 0xFFFFFFFFFFFFFFFF {
                 break;
             }
+            if (line.ends_with("\n") || line.ends_with("\r")) {
+                line.pop();
+            }
             let hash = hash_function(&line, hashmap_size);
             index_structure.add_entry(hash, offset as u64);
             line.clear();
@@ -55,13 +58,13 @@ fn index(input_reader: &mut impl InputReader, filename: String, mut hashmap_size
     
 }
 
-fn search(keyword: String, filename: String, column: usize, separator: String) -> bool{
+fn search(keyword: String, filename: String) -> bool{
     //Get reader for index file
     let mut index_reader = StandardFileReader::new(&format!("{}.index", filename));
     //Read the header size
     let mut buffer = [0; 8];
     index_reader.read_exact(&mut buffer).unwrap();
-    let header_size = buffer[0];
+    let header_size: u8 = buffer[0];
     index_reader.seek(0);
     let mut buf: Vec<u8> = vec![0; header_size as usize];
     index_reader.read_exact(&mut buf).unwrap();
@@ -73,14 +76,16 @@ fn search(keyword: String, filename: String, column: usize, separator: String) -
         false => &mut StandardFileReader::new(&filename),
     };
     let binding = [header.separator];
-    let mut input_reader: Box<dyn InputReader> = match(header.index_type){
+    let mut input_reader: Box<dyn InputReader> = match header.index_type {
         0 => {
             Box::new(TabularInputReader::new(
             original_file_reader, &from_utf8(&binding).unwrap(), header.column as usize
         ))},
-        1 => Box::new(MultiFastaInputReader::new(
-            original_file_reader, false
-        )),
+        1 => {
+            Box::new(MultiFastaInputReader::new(
+                original_file_reader, false
+            ))
+        },
         2  => Box::new(MultiFastaInputReader::new(
             original_file_reader, true
         )),
@@ -175,8 +180,8 @@ fn main() {
         Commands::IndexFastq { filename, by_sequence, hashmap_size, in_memory_map_size } => {
             //
         }
-        Commands::Search { filename, keyword, column, separator, print_duplicates } => {
-            search(keyword, filename, column, separator);
+        Commands::Search { filename, keyword, print_duplicates } => {
+            search(keyword, filename);
         }
         Commands::Test{} => { 
             test();
@@ -198,14 +203,14 @@ fn run_test_fasta(in_memory_map_size: u64){
     let _ = writer.flush();
     index_fasta("multi.fasta".to_string(), false, 0, in_memory_map_size);
     for i in 0..TEST_LEN {
-        assert! (search(format!(">prova{}", i), "multi.fasta".to_string(), 1, ",".to_string()));
+        assert! (search(format!(">prova{}", i), "multi.fasta".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "multi.fasta".to_string(), 1, ",".to_string()));
+    assert! (!search("NOT_EXISTING".to_string(), "multi.fasta".to_string()));
     index_fasta("multi.fasta".to_string(), true, 0, in_memory_map_size);
     for i in 0..TEST_LEN {
-        assert! (search(format!("GGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}", i), "multi.fasta".to_string(), 1, ",".to_string()));
+        assert! (search(format!("GGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}", i), "multi.fasta".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "multi.fasta".to_string(), 1, ",".to_string()));
+    assert! (!search("NOT_EXISTING".to_string(), "multi.fasta".to_string()));
 }
 
 fn run_test(in_memory_map_size: u64){
@@ -220,9 +225,9 @@ fn run_test(in_memory_map_size: u64){
     let _ = writer.flush();
     index_tabular("test.csv".to_string(), 1, ",".to_string(), 0, in_memory_map_size);
     for i in 0..TEST_LEN {
-        assert! (search(format!("prova{}", i), "test.csv".to_string(), 1, ",".to_string()));
+        assert! (search(format!("prova{}", i), "test.csv".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "test.csv".to_string(), 1, ",".to_string()));
+    assert! (!search("NOT_EXISTING".to_string(), "test.csv".to_string()));
 }
 fn run_test_compressed(){
     let path = Path::new("test.csv.gz");
@@ -237,9 +242,9 @@ fn run_test_compressed(){
     let _ = writer.close();
     index_tabular("test.csv.gz".to_string(), 1, ",".to_string(), 0, 1000);
     for i in 0..TEST_LEN {
-        assert! (search(format!("prova{}", i), "test.csv.gz".to_string(), 1, ",".to_string()));
+        assert! (search(format!("prova{}", i), "test.csv.gz".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "test.csv.gz".to_string(), 1, ",".to_string()));
+    assert! (!search("NOT_EXISTING".to_string(), "test.csv.gz".to_string()));
 }
 fn test(){
     run_test_fasta(1000);

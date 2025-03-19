@@ -85,14 +85,6 @@ pub enum Commands {
         /// Keywords to search for
         keyword: String,
 
-        /// Column number to search (0-based)
-        #[arg(short = 'c', long, required = true)]
-        column: usize,
-
-        /// Field separator
-        #[arg(long,short = 's', default_value = "\t")]
-        separator: String,
-
         /// Print all matching lines when duplicates exist.
         /// Note: this tool is not particularly optimized for dataset with many duplicates.
         #[arg(long)]
