@@ -2,7 +2,6 @@ use crate::file_writer;
 use crate::header;
 use file_writer::FileWriter;
 use header::Header;
-use core::hash;
 use std::io::{self};
 use std::cmp::min;
 
@@ -73,7 +72,7 @@ impl IndexStructure{
         //over input file ceil(hashmap_size/in_map_size) times. Sometimes
         //it can be worth reducing the hashmap size to a multiple of in_memory_map_size
         //to avoid the last iteration with a smaller hashmap
-        if (in_memory_map_size < hashmap_size){
+        if in_memory_map_size < hashmap_size{
             let last_iter_size: u64 = hashmap_size % in_memory_map_size;
             if (last_iter_size / hashmap_size) * 100 < HASHMAP_REDUCING_FACTOR{
                 header.hashmap_size -= last_iter_size;
@@ -176,7 +175,6 @@ impl IndexStructure{
         if self.blocks_buffer_used > 0 {
             self.flush_block_buffer(self.blocks_buffer_used);
         }
-        println!("Iteration");
         return keep_on
     }
 
