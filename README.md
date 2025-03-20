@@ -2,7 +2,7 @@
 
 # FastSeek
 
-FastSeek is a high-performance indexer and search tools for **tabular data** (csv, tsv), **multi-fasta** and **fastQ** files.
+FastSeek is a high-performance indexer and search tool for **tabular data** (csv, tsv), **multi-fasta** and **fastQ** files.
 
 * **File-oriented**: FastSeek is designed to work with files, not databases. Plain-text files and compressed .gz files are supported.
 * **As-fast-as-possible**: FastSeek is optimized for speed. It uses a combination of in-memory and on-disk indexing to run as fast as possible.
@@ -48,7 +48,7 @@ This section presents some benchmarks comparing FastSeek to other tools.
 Benchmarks can be run using the Snakefile in the repository root. The conda environment to run the benchmarks is specified in the benchmark_env.yaml file.
 
 ## FastQ, FastSeek vs Samtools faidx
-*Note: comparing to Samtools faidx is not entirely fair, as it is not designed for speed over large files. faidx generates a .fai index which require linear search. However, it is a common tool for this task.*
+*Note: comparing to Samtools faidx is not entirely fair, as it is not designed for speed over large files. faidx generates a .fai index which requires linear search. However, it is a common tool for this task.*
 
 General conditions:
 * FastQ input file.
