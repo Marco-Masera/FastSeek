@@ -210,7 +210,7 @@ fn main() {
 const TEST_LEN: u32 = 100;
 
 fn run_test_fastq(in_memory_map_size: u64){
-    let path = Path::new("test.fastq");
+    let path = Path::new("test_data/test.fastq");
     let file = File::create(&path).unwrap();
     let mut writer = io::BufWriter::new(file);
     for i in 0..TEST_LEN {
@@ -218,20 +218,20 @@ fn run_test_fastq(in_memory_map_size: u64){
         let _ = writer.write_all(format!("{}\nGGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}\n+\n!''*((((***+))%%%++)(%%%%).1***-+*''))**55CCF>>>>>>CCCCCCC65\n", string, i).as_bytes());
     }
     let _ = writer.flush();
-    index_fastq("test.fastq".to_string(), false, 0, in_memory_map_size);
+    index_fastq("test_data/test.fastq".to_string(), false, 0, in_memory_map_size);
     for i in 0..TEST_LEN {
-        assert! (search(format!("@prova{}", i), "test.fastq".to_string()));
+        assert! (search(format!("@prova{}", i), "test_data/test.fastq".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "test.fastq".to_string()));
-    index_fastq("test.fastq".to_string(), true, 0, in_memory_map_size);
+    assert! (!search("NOT_EXISTING".to_string(), "test_data/test.fastq".to_string()));
+    index_fastq("test_data/test.fastq".to_string(), true, 0, in_memory_map_size);
     for i in 0..TEST_LEN {
-        assert! (search(format!("GGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}", i), "test.fastq".to_string()));
+        assert! (search(format!("GGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}", i), "test_data/test.fastq".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "test.fastq".to_string()));
+    assert! (!search("NOT_EXISTING".to_string(), "test_data/test.fastq".to_string()));
 }
 
 fn run_test_fasta(in_memory_map_size: u64){
-    let path = Path::new("multi.fasta");
+    let path = Path::new("test_data/multi.fasta");
     let file = File::create(&path).unwrap();
     let mut writer = io::BufWriter::new(file);
     for i in 0..TEST_LEN {
@@ -240,20 +240,20 @@ fn run_test_fasta(in_memory_map_size: u64){
         //writer.write_line();
     }
     let _ = writer.flush();
-    index_fasta("multi.fasta".to_string(), false, 0, in_memory_map_size);
+    index_fasta("test_data/multi.fasta".to_string(), false, 0, in_memory_map_size);
     for i in 0..TEST_LEN {
-        assert! (search(format!(">prova{}", i), "multi.fasta".to_string()));
+        assert! (search(format!(">prova{}", i), "test_data/multi.fasta".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "multi.fasta".to_string()));
-    index_fasta("multi.fasta".to_string(), true, 0, in_memory_map_size);
+    assert! (!search("NOT_EXISTING".to_string(), "test_data/multi.fasta".to_string()));
+    index_fasta("test_data/multi.fasta".to_string(), true, 0, in_memory_map_size);
     for i in 0..TEST_LEN {
-        assert! (search(format!("GGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}", i), "multi.fasta".to_string()));
+        assert! (search(format!("GGTCAGCCCTCAAGGGAATCTGAACTCCTCCA{}", i), "test_data/multi.fasta".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "multi.fasta".to_string()));
+    assert! (!search("NOT_EXISTING".to_string(), "test_data/multi.fasta".to_string()));
 }
 
 fn run_test(in_memory_map_size: u64){
-    let path = Path::new("test.csv");
+    let path = Path::new("test_data/test.csv");
     let file = File::create(&path).unwrap();
     let mut writer = io::BufWriter::new(file);
     for i in 0..TEST_LEN {
@@ -262,19 +262,19 @@ fn run_test(in_memory_map_size: u64){
         //writer.write_line();
     }
     let _ = writer.flush();
-    index_tabular("test.csv".to_string(), 1, ",".to_string(), 0, in_memory_map_size);
+    index_tabular("test_data/test.csv".to_string(), 1, ",".to_string(), 0, in_memory_map_size);
     for i in 0..TEST_LEN {
-        assert! (search(format!("prova{}", i), "test.csv".to_string()));
+        assert! (search(format!("prova{}", i), "test_data/test.csv".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "test.csv".to_string()));
-    index_tabular("test.csv".to_string(), 6, ",".to_string(), 0, in_memory_map_size);
+    assert! (!search("NOT_EXISTING".to_string(), "test_data/test.csv".to_string()));
+    index_tabular("test_data/test.csv".to_string(), 6, ",".to_string(), 0, in_memory_map_size);
     for i in 0..TEST_LEN {
-        assert! (search(format!("Lprova{}", i), "test.csv".to_string()));
+        assert! (search(format!("Lprova{}", i), "test_data/test.csv".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "test.csv".to_string()));
+    assert! (!search("NOT_EXISTING".to_string(), "test_data/test.csv".to_string()));
 }
 fn run_test_compressed(){
-    let path = Path::new("test.csv.gz");
+    let path = Path::new("test_data/test.csv.gz");
     let file = File::create(&path).unwrap();
     let buf_writer = io::BufWriter::new(file);
     let mut writer = BGZFWriter::new(buf_writer, Compression::default());
@@ -284,11 +284,11 @@ fn run_test_compressed(){
     }
     let _ = writer.flush();
     let _ = writer.close();
-    index_tabular("test.csv.gz".to_string(), 1, ",".to_string(), 0, 1000);
+    index_tabular("test_data/test.csv.gz".to_string(), 1, ",".to_string(), 0, 1000);
     for i in 0..TEST_LEN {
-        assert! (search(format!("prova{}", i), "test.csv.gz".to_string()));
+        assert! (search(format!("prova{}", i), "test_data/test.csv.gz".to_string()));
     }
-    assert! (!search("NOT_EXISTING".to_string(), "test.csv.gz".to_string()));
+    assert! (!search("NOT_EXISTING".to_string(), "test_data/test.csv.gz".to_string()));
 }
 fn test(){
     run_test_fastq(1000);

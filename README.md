@@ -39,3 +39,23 @@ fastseek index-fastq <--by-sequence> <options> <FILENAME>
 fastseek search <ORIGINAL_FILENAME> <QUERY>
 ```
 The filename must be the original filename used to create the index. FastSeek will look for the index file in the same directory.
+
+# Benchmarking
+** In Development **
+
+This section presents some benchmarks comparing FastSeek to other tools.
+
+Benchmarks can be run using the Snakefile in the repository root. The conda environment to run the benchmarks is specified in the benchmark_env.yaml file.
+
+## FastQ, FastSeek vs Samtools faidx
+*Note: comparing to Samtools faidx is not entirely fair, as it is not designed for speed over large files. faidx generates a .fai index which require linear search. However, it is a common tool for this task.*
+
+Conditions:
+* 1.000.000 reads input fastQ file.
+* 100 queries, from random sequences in the file.
+* Default settings for Samtools faidx.
+* --hashmap-size 1.000.000 for FastSeek.
+
+Results:
+
+![Benchmark Plot](.img/plots.png)

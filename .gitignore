@@ -1,2 +1,5 @@
 /target
-/data
+/benchmark_data
+test_data/*
+fastseek
+.snakemake

@@ -1,0 +1,10 @@
+name: fastseek_test
+channels:
+  - conda-forge
+dependencies:
+  - bioconda::snakemake
+  - bioconda::samtools
+  - ca-certificates
+  - certifi
+  - openssl
+prefix: /home/mmasera/.conda/envs/fastseek_test
