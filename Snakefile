@@ -13,7 +13,7 @@ rule get_binary:
 
 # FastQ test - uncompressed
 ORIGINAL_FILE = "benchmark_data/ERR2162313_2.fastq.gz"
-NUM_ENTRIES = 1000000 
+NUM_ENTRIES = 10000000 
 NUM_LINES = NUM_ENTRIES * 4
 NUM_SUCCESSFUL_SEARCHES = 100
 NUM_UNSUCCESSFUL_SEARCHES = 100
@@ -24,7 +24,8 @@ rule run_test:
         "benchmark_data/fastseek_index_benchmark.txt",
         "benchmark_data/fastseek_search_benchmark.txt",
         "benchmark_data/samtools_index_benchmark.txt",
-        "benchmark_data/samtools_search_benchmark.txt"
+        "benchmark_data/samtools_search_benchmark.txt",
+        "benchmark_data/plots.png"
 
 rule get_fastq:
     input:

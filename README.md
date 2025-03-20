@@ -50,12 +50,18 @@ Benchmarks can be run using the Snakefile in the repository root. The conda envi
 ## FastQ, FastSeek vs Samtools faidx
 *Note: comparing to Samtools faidx is not entirely fair, as it is not designed for speed over large files. faidx generates a .fai index which require linear search. However, it is a common tool for this task.*
 
-Conditions:
-* 1.000.000 reads input fastQ file.
+General conditions:
+* FastQ input file.
 * 100 queries, from random sequences in the file.
 * Default settings for Samtools faidx.
 * --hashmap-size 1.000.000 for FastSeek.
 
-Results:
+#### Results with 1.000.000 reads in the FastQ file:
 
 ![Benchmark Plot](.img/plots.png)
+
+#### Results with 10.000.000 reads in the FastQ file:
+
+![Benchmark Plot](.img/plots_10M.png)
+
+As expected, FastSeek is much faster than Samtools faidx. The difference in search time increases with the size of the file, as Samtools faidx requires linear search while FastSeek uses a hashmap.
