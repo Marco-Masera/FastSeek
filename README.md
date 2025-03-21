@@ -45,10 +45,10 @@ The filename must be the original filename used to create the index. FastSeek wi
 
 This section presents some benchmarks comparing FastSeek to other tools.
 
-Benchmarks can be run using the Snakefile in the repository root. The conda environment to run the benchmarks is specified in the benchmark_env.yaml file.
+Benchmarks are defined in the Snakefile in the repository root. The conda environment to run the benchmarks is specified in the benchmark_env.yaml file.
 
-## FastQ, FastSeek vs Samtools faidx
-*Note: comparing to Samtools faidx is not entirely fair, as it is not designed for speed over large files. faidx generates a .fai index which requires linear search. However, it is a common tool for this task.*
+## FastSeek vs Samtools faidx
+*Comparing with Samtools faidx is not entirely fair, as it is not optimized for speed over large input files. Samtools faidx generates a .fai index, which still requires a linear search. However, it remains a commonly used tool for this task.*
 
 General conditions:
 * FastQ input file.
